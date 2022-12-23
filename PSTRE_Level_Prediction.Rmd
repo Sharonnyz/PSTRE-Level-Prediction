@@ -1,0 +1,174 @@
+---
+title: "Adult’s PSTRE Level Prediction"
+author: "Ying Zhou"
+date: "2022-10-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options (warn = -1)
+```
+
+##  Explore the PIAAC Dataset with R
+
+```{r}
+PIAAC<- read.csv("PIAAC_US_2012_subsample.csv", header=TRUE)
+
+library(dplyr)
+
+PIAAC1<- select(PIAAC,+contains("num_of_diff_emails_views"),+contains("num_of_email_views"),+contains("num_switching_environment"),+contains("num_of_diff_visited_pages"),+contains("num_of_page_visit"),+contains("time_on_task"),"PVLIT1","PVNUM1")
+
+PIAAC1["U"]<-PIAAC["U01a000A"]+PIAAC["U01b000A"]+PIAAC["U03a000A"]+PIAAC["U06a000A"]+PIAAC["U06b000A"]+PIAAC["U21x000A"]+PIAAC["U04a000A"]+PIAAC["U19a000A"]+PIAAC["U19b000A"]+PIAAC["U07x000A"]+PIAAC["U02x000A"]+PIAAC["U16x000A"]+PIAAC["U11b000A"]+PIAAC["U23x000A"]
+
+#PIAAC1<-scale(PIAAC1,center=TRUE, scale=TRUE)*10
+PS_class<-PIAAC["PS_class"]
+PIAAC1<-cbind(PIAAC1,new_col=PS_class)
+PIAAC1<-na.omit(PIAAC1)
+#names(PIAAC1)
+#skim(PIAAC)
+```
+
+## Setting up training and test set
+```{r}
+PIAAC1$PS_class<-as.factor(PIAAC1$PS_class)
+library(caret)
+
+set.seed(9)
+
+inTrain <- createDataPartition(y = PIAAC1$PS_class, p = .8, list = FALSE)
+PIAAC1_train <- PIAAC1 %>% slice(inTrain)
+PIAAC1_test <- PIAAC1 %>% slice(-inTrain)
+
+train_index <- createFolds(PIAAC1_train$PS_class, k = 10) ##10 fold inner loop cross-validation
+```
+
+
+## Random Forest
+
+```{r}
+randomForestFit <- PIAAC1_train %>% train(PS_class ~ .,
+  method = "rf",
+  data = .,
+    tuneLength = 5,
+    trControl = trainControl(method = "cv", indexOut = train_index))
+randomForestFit
+```
+
+```{r}
+plot(randomForestFit$finalModel, main="Random Forest Model")
+```
+
+
+```{r}
+print(varImp(randomForestFit))
+plot(varImp(randomForestFit))
+```
+
+
+
+```{r}
+pr_rf <- predict(randomForestFit, PIAAC1_test)
+pr_rf
+```
+
+
+```{r}
+#confusionMatrix(pr_rf, reference = PIAAC1_test$PS_class)
+confusionMatrix(pr_rf, reference = PIAAC1_test$PS_class, mode = "prec_recall")
+```
+
+## Linear Support Vector Machine
+
+```{r}
+svmFit <- PIAAC1_train %>% train(PS_class ~.,
+  method = "svmLinear",
+  data = .,
+    tuneLength = 5,
+    trControl = trainControl(method = "cv", indexOut = train_index))
+svmFit
+```
+
+
+```{r}
+print(varImp(svmFit))
+#plot(varImp(svmFit))
+```
+
+
+Make the prediction on test data
+
+```{r}
+pr_svm <- predict(svmFit, PIAAC1_test)
+pr_svm
+```
+
+Check confusion matrix between prediction and actual type (gold standard) in the test set.
+
+```{r}
+#confusionMatrix(pr_svm, reference = PIAAC1_test$PS_class)
+confusionMatrix(pr_svm, reference = PIAAC1_test$PS_class, mode = "prec_recall")  ##get the precision, recall and F-measure
+```
+
+
+## Support Vector Machine with Radial Kernel
+
+```{r}
+svmrad <- PIAAC1_train %>% train(PS_class ~.,
+  method = "svmRadial",
+  data = .,
+    tuneLength = 5,
+    trControl = trainControl(method = "cv", indexOut = train_index))
+svmrad
+```
+
+
+```{r}
+print(varImp(svmrad))
+#plot(varImp(svmrad))
+```
+
+
+```{r}
+pr_svmrad <- predict(svmrad, PIAAC1_test)
+pr_svmrad
+```
+
+
+```{r}
+confusionMatrix(pr_svmrad, reference = PIAAC1_test$PS_class)
+```
+
+
+## Conditional Inference Tree (Decision Tree)
+```{r}
+ctreeFit <- PIAAC1_train %>% train(PS_class ~ .,
+  method = "ctree",
+  data = .,
+    tuneLength = 5,
+    trControl = trainControl(method = "cv", indexOut = train_index))
+ctreeFit
+```
+
+
+```{r}
+print(varImp(ctreeFit))
+#plot(varImp(ctreeFit))
+```
+
+
+Make the prediction on test data
+
+```{r}
+pr_ctree <- predict(ctreeFit, PIAAC1_test)
+pr_ctree
+```
+
+Check confusion matrix between prediction and actual type (gold standard) in the test set.
+```{r}
+confusionMatrix(pr_ctree, reference = PIAAC1_test$PS_class)
+```
+
+
+
+
